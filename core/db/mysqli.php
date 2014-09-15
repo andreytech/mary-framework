@@ -1,7 +1,6 @@
 <?php
 
 class CoreDBMysqli {
-	public static $_instance = null;
 	protected $user;
 	protected $pass;
 	protected $dbhost;
@@ -10,27 +9,6 @@ class CoreDBMysqli {
 	protected $query = '';
 	protected $result = null;
 	protected $error = '';
-	
-	public static function getInstance() {
-		if (null === self::$_instance) {
-			$config = CoreConfig::getInstance();
-			self::$_instance = new self(
-				$config->get('dbhost')
-				, $config->get('dbname')
-				, $config->get('dbuser')
-				, $config->get('dbpass')
-			);
-		}
-
-		return self::$_instance;
-	}
-
-	public function __construct($host, $dbname, $user, $pass) {
-		$this->dbhost = $host;
-		$this->dbname = $dbname;
-		$this->user = $user;
-		$this->pass = $pass;
-	}
 	
 	protected function connect() {
 		if($this->dbh) {
@@ -92,6 +70,23 @@ class CoreDBMysqli {
 		}
 		return $retval;
 	}
+	
+    public function getCell() {
+        if (!$this->execute()) {
+            return false;
+        }
+
+        // INSERT/UPDATE/DELETE query executed
+        if($this->result === true) {
+            return true;
+        }
+
+        $retval = $this->result->fetch_array();
+        if ($retval === false) {
+            return null;
+        }
+        return $retval[0];
+    }
 	
 	public function getDBConnection() {
 		return $this->dbh;
@@ -192,47 +187,7 @@ class CoreDBMysqli {
 		return $this;
 	}
 
-	public function insert($table, $data) {
-		if(empty($data) || empty($table) || !is_array($data)) {
-			return false;
-		}
-
-		$values = array();
-		foreach($data as $field => $value) {
-			$field = $this->escape($field);
-			$value = $this->escape($value);
-			$values[] = " `{$field}` = '{$value}' ";
-		}
-
-		$q = "INSERT INTO `{$table}` SET ".implode(', ', $values);
-
-		return $this->setQuery($q)->execute();
-	}
-
-	public function update($table, $data, $condition) {
-		if(empty($data) || empty($table) || !is_array($data)) {
-			return false;
-		}
-
-		$values = array();
-		foreach($data as $field => $value) {
-			$field = $this->escape($field);
-			$value = $this->escape($value);
-			$values[] = " `{$field}` = '{$value}' ";
-		}
-
-		$q = "UPDATE `{$table}` SET ".implode(', ', $values)." WHERE {$condition}";
-//		var_dump($q);exit;
-		return $this->setQuery($q)->execute();
-	}
-
-	public function delete($table, $condition) {
-		if(empty($table) || empty($condition)) {
-			return false;
-		}
-
-		$q = "DELETE FROM `{$table}` WHERE {$condition}";
-
-		return $this->setQuery($q)->execute();
+	public function getQuery() {
+		return $this->query;
 	}
 }
