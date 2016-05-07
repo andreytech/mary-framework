@@ -11,6 +11,7 @@ include_once CORE_FOLDER.'controller.php';
 include_once CORE_FOLDER.'url.php';
 include_once CORE_FOLDER.'db/mysqli.php';
 include_once CORE_FOLDER.'db/active_record.php';
+include_once CORE_FOLDER.'db/statement.php';
 include_once CORE_FOLDER.'views_loader.php';
 include_once CORE_FOLDER.'models_loader.php';
 include_once CORE_FOLDER.'model.php';

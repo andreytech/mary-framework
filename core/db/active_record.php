@@ -6,39 +6,46 @@ class CoreActiveRecord extends CoreDBMysqli {
 
 	public static function getInstance() {
 		if (null === self::$_instance) {
-			$config = CoreConfig::getInstance();
-			self::$_instance = new self(
-				$config->get('dbhost')
-				, $config->get('dbname')
-				, $config->get('dbuser')
-				, $config->get('dbpass')
-			);
+			self::$_instance = new self();
 		}
 
 		return self::$_instance;
 	}
 
-	public function __construct($host, $dbname, $user, $pass) {
+	public function __construct($host = '', $dbname = '', $user = '', $pass = '') {
+		if(empty($dbname)) {
+			$config = CoreConfig::getInstance();
+			$host = $config->get('dbhost');
+			$dbname = $config->get('dbname');
+			$user = $config->get('dbuser');
+			$pass = $config->get('dbpass');
+		}
+
 		$this->dbhost = $host;
 		$this->dbname = $dbname;
 		$this->user = $user;
 		$this->pass = $pass;
 	}
 
-	public function insert($table, $data, $table_fields = false) {
+	public function insert($table, $data, $table_fields = array()) {
 		if(empty($data) || empty($table) || !is_array($data)) {
 			return false;
 		}
 
 		$values = array();
 		foreach($data as $field => $value) {
-			if(is_array($table_fields) && !in_array($field, $table_fields)
+			if(is_array($table_fields) && !empty($table_fields) && !in_array($field, $table_fields)
 			) {
 				continue;
 			}
 			$field = $this->escape($field);
+			if(is_a($value, 'DBStatement')) {
+				$val = $value->getValue();
+				$values[] = " `{$field}` = {$val} ";
+			}else {
 			$value = $this->escape($value);
 			$values[] = " `{$field}` = '{$value}' ";
+		}
 		}
 
 		$q = "INSERT INTO `{$table}` SET ".implode(', ', $values);
@@ -61,9 +68,16 @@ class CoreActiveRecord extends CoreDBMysqli {
 			) {
 				continue;
 			}
+
 			$field = $this->escape($field);
+			if(is_a($value, 'DBStatement')) {
+				$val = $value->getValue();
+				$values[] = " `{$field}` = {$val} ";
+			}else {
 			$value = $this->escape($value);
 			$values[] = " `{$field}` = '{$value}' ";
+		}
+
 		}
 
 		$q = "UPDATE `{$table}` SET ".implode(', ', $values)." WHERE {$condition}";
@@ -89,7 +103,7 @@ class CoreActiveRecord extends CoreDBMysqli {
 		if(!empty($this->select_params['fields'])) {
 			$q .= implode(',', $this->select_params['fields']);
 		}else {
-			$q .= '*';
+			$q .= " `{$this->select_params['table']}`.* ";
 		}
 		$q .= " \nFROM `{$this->select_params['table']}` ";
 		if(!empty($this->select_params['table_synonym'])) {
@@ -102,10 +116,22 @@ class CoreActiveRecord extends CoreDBMysqli {
 			$q .= " \nWHERE ".implode(" \nAND ", $this->select_params['where']);
 		}
 		if(!empty($this->select_params['group_by'])) {
-			$q .= " \nGROUP BY ".$this->select_params['group_by'];
+			if(strpos($this->select_params['group_by'], '.') === false
+				&& strpos($this->select_params['group_by'], ',') === false
+			) {
+				$q .= " \nGROUP BY `{$this->select_params['table']}`.`".$this->select_params['group_by'].'`';
+			}else {
+				$q .= " \nGROUP BY `".$this->select_params['group_by'].'`';
+			}
 		}
 		if(!empty($this->select_params['order_by'])) {
-			$q .= " \nORDER BY ".$this->select_params['order_by'];
+			if(strpos($this->select_params['order_by'], '.') === false
+				&& strpos($this->select_params['order_by'], ',') === false
+			) {
+				$q .= " \nORDER BY `{$this->select_params['table']}`.`".$this->select_params['order_by'].'`';
+			}else {
+				$q .= " \nORDER BY ".$this->select_params['order_by'].'';
+			}
 		}
 		if(!empty($this->select_params['limit'])) {
 			$q .= " \nLIMIT ";
@@ -149,10 +175,10 @@ class CoreActiveRecord extends CoreDBMysqli {
 		if(count($args) == 1) {
 			if(is_array($args[0])) {
 				foreach($args[0] as $field => $value) {
-					$this->select_params['where'][] = "`".$this->escape($field)."` = '".$this->escape($value)."'";
+					$this->select_params['where'][] = "(`".$this->escape($field)."` = '".$this->escape($value)."')";
 				}
 			}else {
-				$this->select_params['where'][] = $args[0];
+				$this->select_params['where'][] = '('.$args[0].')';
 			}
 		}else {
 			$value = $this->escape($args[1]);
@@ -162,9 +188,9 @@ class CoreActiveRecord extends CoreDBMysqli {
 				}
 			}
 			if(strstr($args[0], '.')!==false) {
-				$this->select_params['where'][] = $this->escape($args[0])." = '{$value}'";
+				$this->select_params['where'][] = '('.$this->escape($args[0])." = '{$value}')";
 			}else {
-				$this->select_params['where'][] = "`".$this->escape($args[0])."` = '{$value}'";
+				$this->select_params['where'][] = "(`".$this->escape($args[0])."` = '{$value}')";
 			}
 
 		}
@@ -229,6 +255,9 @@ class CoreActiveRecord extends CoreDBMysqli {
 			$this->setQuery("ROLLBACK")->execute();
 			$this->is_trans_started = 0;
 		}
+		if($res === false) {
+			error('Db query failed: '. $this->query.'<br>Message:<br>'.$this->error);
+		}
 
 		return $res;
 	}
@@ -245,5 +274,9 @@ class CoreActiveRecord extends CoreDBMysqli {
 		$this->setQuery("COMMIT")->execute();
 		$this->is_trans_started = 0;
 		return true;
+	}
+
+	public function html_entities($str, $flags = ENT_QUOTES) {
+		return htmlentities($str, $flags, 'UTF-8');
 	}
 }
